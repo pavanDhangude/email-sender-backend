@@ -1,13 +1,22 @@
-# Use Java 21 (Render supports this)
-FROM eclipse-temurin:21-jdk-jammy
-
-# App directory
+# ---------- Build stage ----------
+FROM maven:3.9.9-eclipse-temurin-21 AS build
 WORKDIR /app
 
-# Copy jar into container
-COPY target/EmailSender-0.0.1-SNAPSHOT.jar app.jar
+# Copy pom and source
+COPY pom.xml .
+COPY src ./src
 
-# Expose port (Spring Boot default / Render uses this)
+# Build jar
+RUN mvn clean package -DskipTests
+
+# ---------- Runtime stage ----------
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+
+# Copy jar from build stage
+COPY --from=build /app/target/*.jar app.jar
+
+# Expose port (Render uses 8080)
 EXPOSE 8080
 
 # Run app
