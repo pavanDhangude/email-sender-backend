@@ -1,24 +1,18 @@
 package com.emailsenser.EmailSender.services.impl;
+
 import com.emailsenser.EmailSender.helper.Message;
-
-
 import com.emailsenser.EmailSender.services.EmailService;
 import jakarta.mail.*;
-import jakarta.mail.Folder;
-import jakarta.mail.MessagingException;
-import jakarta.mail.NoSuchProviderException;
-import jakarta.mail.Session;
-import jakarta.mail.Store;
 import jakarta.mail.internet.MimeMessage;
-import jakarta.mail.internet.MimeMessage;
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.slf4j.Logger;
 
 import java.io.File;
 import java.io.IOException;
@@ -29,222 +23,154 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
-
 @Service
-public class EmailServiceImpl implements EmailService
-{
-    private JavaMailSender mailSender;
+public class EmailServiceImpl implements EmailService {
 
-    private Logger logger = LoggerFactory.getLogger(EmailServiceImpl.class);
+    private final JavaMailSender mailSender;
+    private final Logger logger = LoggerFactory.getLogger(EmailServiceImpl.class);
 
+    // ⚠️ MUST BE BREVO VERIFIED EMAIL
+    private static final String FROM_EMAIL = "pavandhangude28@gmail.com";
 
-    public EmailServiceImpl(JavaMailSender mailsender) {
-        this.mailSender = mailsender;
+    public EmailServiceImpl(JavaMailSender mailSender) {
+        this.mailSender = mailSender;
     }
 
+    // ===================== SIMPLE TEXT EMAIL =====================
 
-
-
+    @Async
     @Override
     public void sendEmail(String to, String subject, String message) {
-         SimpleMailMessage  simpleMailMessage = new SimpleMailMessage();
-        simpleMailMessage.setTo(to);
-        simpleMailMessage.setSubject(subject);
-        simpleMailMessage.setText(message);
-        simpleMailMessage.setFrom("arjitsingh12323@gmail.com");
-        mailSender.send(simpleMailMessage);
-        logger.info("Email has been sent...");
+        try {
+            SimpleMailMessage mail = new SimpleMailMessage();
+            mail.setTo(to);
+            mail.setSubject(subject);
+            mail.setText(message);
+            mail.setFrom(FROM_EMAIL);
 
+            mailSender.send(mail);
+            logger.info("Text email sent to {}", to);
+        } catch (Exception e) {
+            logger.error("Failed to send text email", e);
+        }
     }
 
     @Override
     public void sendEmail(String[] to, String subject, String message) {
-        SimpleMailMessage simpleMailMessage = new SimpleMailMessage();
-        simpleMailMessage.setTo(to);
-        simpleMailMessage.setSubject(subject);
-        simpleMailMessage.setText(message);
-        simpleMailMessage.setFrom("arjitsingh12323@gmail.com");
-        mailSender.send(simpleMailMessage);
 
     }
 
+    // ===================== HTML EMAIL =====================
+
+    @Async
     @Override
     public void sendEmailWithHtml(String to, String subject, String htmlContent) {
-
-         MimeMessage simpleMailMessage = mailSender.createMimeMessage();
         try {
-            MimeMessageHelper helper = new MimeMessageHelper(simpleMailMessage,true,"UTF-8");
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper =
+                    new MimeMessageHelper(mimeMessage, true, "UTF-8");
+
             helper.setTo(to);
             helper.setSubject(subject);
-            helper.setFrom("arjitsingh12323@gmail.com");
-            helper.setText(htmlContent,true);
-            mailSender.send(simpleMailMessage);
-            logger.info("Email has been sent...");
+            helper.setFrom(FROM_EMAIL);
+            helper.setText(htmlContent, true);
 
-        } catch (MessagingException e) {
-            throw new RuntimeException(e);
+            mailSender.send(mimeMessage);
+            logger.info("HTML email sent to {}", to);
+
+        } catch (Exception e) {
+            logger.error("Failed to send HTML email", e);
         }
-
-
     }
 
     @Override
     public void sendEmailWithFile(String to, String subject, String message, File file) {
-         MimeMessage mimeMessage= mailSender.createMimeMessage();
-        try {
-            MimeMessageHelper helper= new MimeMessageHelper(mimeMessage,true);
-            helper.setFrom("pavandhangude28@gmail.com");
-            helper.setTo(to);
-            helper.setText(message);
-            helper.setSubject(subject);
-            FileSystemResource fileSystemResource = new FileSystemResource(file);
-            helper.addAttachment(fileSystemResource.getFilename(),file);
-
-            mailSender.send(mimeMessage);
-            logger.info("Email send success!");
-
-        } catch (MessagingException e) {
-            throw new RuntimeException(e);
-
-        }
-
 
     }
 
+    // ===================== EMAIL WITH FILE =====================
+
+    @Async
     @Override
     public void sendEmailWithFile(String to, String subject, String message, InputStream is) {
-
-        MimeMessage mimeMessage= mailSender.createMimeMessage();
         try {
-            MimeMessageHelper helper= new MimeMessageHelper(mimeMessage,true);
-            helper.setFrom("pavandhangude28@gmail.com");
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper =
+                    new MimeMessageHelper(mimeMessage, true);
+
             helper.setTo(to);
-            helper.setText(message,true);
             helper.setSubject(subject);
-            File file = new File("src/main/resources/email/test.png");
-            Files.copy(is,  file.toPath(), StandardCopyOption.REPLACE_EXISTING);
-            FileSystemResource fileSystemResource = new FileSystemResource(file);
-           helper.addAttachment(fileSystemResource.getFilename(),file);
+            helper.setFrom(FROM_EMAIL);
+            helper.setText(message, true);
+
+            File tempFile = new File("attachment-temp");
+            Files.copy(is, tempFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+
+            FileSystemResource resource = new FileSystemResource(tempFile);
+            helper.addAttachment(resource.getFilename(), resource);
+
             mailSender.send(mimeMessage);
-            logger.info("Email send success!");
+            logger.info("Email with attachment sent to {}", to);
 
-        } catch (MessagingException e) {
-            throw new RuntimeException(e);
-
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        } catch (Exception e) {
+            logger.error("Failed to send email with attachment", e);
         }
     }
 
-    @Value("${mail.store.protocol}")
-     String protocol;
+    // ===================== EMAIL READING CONFIG =====================
 
+    @Value("${mail.store.protocol:imaps}")
+    private String protocol;
 
-    @Value("${mail.imaps.host}")
-     String host;
-    @Value("${mail.imaps.port}")
-     String port;
+    @Value("${mail.imaps.host:imap.gmail.com}")
+    private String host;
+
+    @Value("${mail.imaps.port:993}")
+    private String port;
+
     @Value("${spring.mail.username}")
-     String username;
+    private String username;
+
     @Value("${spring.mail.password}")
-     String password;
+    private String password;
 
     @Override
     public List<Message> getInboxMessages() {
-        //code to receive email: get all email
-        Properties configurations=new Properties();
-        configurations.setProperty("mail.store.protocol",protocol);
-        configurations.setProperty("mail.imaps.host",host);
-        configurations.setProperty("mail.imaps.port",port);
-
-
-        Session session= Session.getDefaultInstance(configurations);
+        List<Message> list = new ArrayList<>();
         try {
-            Store store=session.getStore();
-            store.connect(username,password);
-           Folder inbox = store.getFolder("INBOX");
-           inbox.open(Folder.READ_ONLY);
-           jakarta.mail.Message[] messages = inbox.getMessages();
+            Properties props = new Properties();
+            props.setProperty("mail.store.protocol", protocol);
+            props.setProperty("mail.imaps.host", host);
+            props.setProperty("mail.imaps.port", port);
 
-           List<Message> list= new ArrayList<>();
+            Session session = Session.getDefaultInstance(props);
+            Store store = session.getStore();
+            store.connect(username, password);
 
-           for (jakarta.mail.Message message : messages){
+            Folder inbox = store.getFolder("INBOX");
+            inbox.open(Folder.READ_ONLY);
 
+            jakarta.mail.Message[] messages = inbox.getMessages();
 
-               String content =getContentFromEmailMessage(message);
-               List<String> files=getFilesFromEmailMessage(message);
-
-
-               list.add(Message.builder().subjects(message.getSubject()).content(content).files(files).build());
-
-
-           }
-           return list;
-
-
-        } catch (NoSuchProviderException e) {
-            throw new RuntimeException(e);
-        } catch (MessagingException e) {
-            throw new RuntimeException(e);
-        }
-
-    }
-
-    private List<String> getFilesFromEmailMessage(jakarta.mail.Message message) {
-
-        List<String> files = new ArrayList<>();
-
-        try {
-            if (message.isMimeType("multipart/*")) {
-
-                Multipart content = (Multipart) message.getContent();
-
-                for (int i = 0; i < content.getCount(); i++) {
-                    BodyPart bodyPart = content.getBodyPart(i);
-
-                    if (Part.ATTACHMENT.equalsIgnoreCase(bodyPart.getDisposition())) {
-
-                        InputStream inputStream = bodyPart.getInputStream();
-                        File file = new File("src/main/resources/email/" + bodyPart.getFileName());
-
-                        Files.copy(inputStream, file.toPath(), StandardCopyOption.REPLACE_EXISTING);
-
-                        files.add(file.getAbsolutePath());
-                    }
-                }
-            }
-        } catch (MessagingException | IOException e) {
-            throw new RuntimeException("Error while extracting attachments", e);
-        }
-
-        return files;
-    }
-
-
-    private String getContentFromEmailMessage(jakarta.mail.Message message) {
-
-        try {
-            if (message.isMimeType("text/plain") || message.isMimeType("text/html")) {
-                return message.getContent().toString();
-
-            } else if (message.isMimeType("multipart/*")) {
-
-                Multipart part = (Multipart) message.getContent();
-
-                for (int i = 0; i < part.getCount(); i++) {
-                    BodyPart bodyPart = part.getBodyPart(i);
-
-                    if (bodyPart.isMimeType("text/plain")) {
-                        return bodyPart.getContent().toString();
-                    }
-                }
+            for (jakarta.mail.Message msg : messages) {
+                list.add(
+                        Message.builder()
+                                .subjects(msg.getSubject())
+                                .content(getContent(msg))
+                                .build()
+                );
             }
 
-        } catch (MessagingException | IOException e) {
-            throw new RuntimeException("Error while reading email content", e);
+        } catch (Exception e) {
+            logger.error("Failed to read inbox", e);
         }
-
-        return null;
+        return list;
     }
 
+    private String getContent(jakarta.mail.Message message) throws Exception {
+        if (message.isMimeType("text/plain") || message.isMimeType("text/html")) {
+            return message.getContent().toString();
+        }
+        return "";
+    }
 }
